@@ -79,5 +79,5 @@ All data is synthetic: invented brand names, generic street names, and tax IDs w
 ## Roadmap
 
 - **Phase 2** (done): rules that cut wrong merges and route undecidable cases to review. See `DECISIONES.md`.
-- **Phase 3**: an LLM decides the REVIEW pairs, with structured output and cited evidence. The evaluation compares models on accuracy, cost per 1,000 records and latency against the ceiling above.
+- **Phase 3** (code ready, live runs pending): an LLM decides the REVIEW pairs. It answers `same_company`, `different_companies` or `needs_external_check`, in a JSON schema with confidence, pattern and cited evidence; anything it cannot settle goes to a person. Claude Haiku 5.5 and Claude Sonnet 5.5 are compared on wrong merges, hand-offs, end-to-end F1, cost per 1,000 records and latency. Run it with `pip install -e ".[llm]"`, an API key, and `make llm-sample` / `make llm-dev` / `make llm-test` (see `PLAN.md`). Design decisions D5–D10 are in `DECISIONES.md`.
 - **Phase 4**: golden record proposal (survivorship rules, customer and vendor roles on one BP), a review screen for people, and a legacy-key → BP mapping file for the migration.

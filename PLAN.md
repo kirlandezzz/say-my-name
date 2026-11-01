@@ -25,13 +25,31 @@ Todo está en `DECISIONES.md`. En test, las fusiones erróneas bajan de 16 a 1, 
 - que «CORCA» no se convierta en COMERCIAL (expandir solo si la palabra va seguida de punto);
 - una métrica que pese más una fusión errónea que un duplicado perdido.
 
-## Fase 3: LLM en la zona gris (1-2 fines de semana, en tu ordenador personal)
+## Fase 3: LLM en la zona gris (código listo el 1-nov; falta ejecutarlo)
 
-- Entrada: `out/<run>/review.csv`. Salida estructurada en JSON: `same_company` (sí/no/no lo sé), `confidence`, `evidence` (los campos que lo justifican) y `risk` («posible CIF copiado», «empresa hermana»…).
-- Modelos: Claude Haiku 5.5 frente a Sonnet 5.5. Las reglas fijas y las instrucciones van en un prompt cacheado.
-- Métricas: precisión y cobertura sobre la zona gris, F1 final frente al techo, coste por cada mil registros, latencia y porcentaje de «no lo sé» que pasa a una persona.
-- Evals en CI con un límite de gasto en la cuenta de Anthropic. La clave, solo como secreto, nunca en el repo.
-- Tiene que mejorar a «aceptar todo a ciegas» (95,4 % de F1) y acercarse a 97,2 %.
+El diseño y sus motivos están en `DECISIONES.md` (D5–D10). El código está en `say_my_name/adjudicate.py` y se prueba sin red con un cliente falso.
+
+**Pasos en tu ordenador personal**, con tu clave de Anthropic y un límite de gasto en el workspace:
+
+```bash
+git pull
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[llm]"                        # solo instala anthropic==1.17.0
+export ANTHROPIC_API_KEY=...                   # o `ant auth login`; nunca en el repo
+make dev && make eval                          # regenera data/ y out/ (no están en git)
+make llm-sample                                # 50 pares de desarrollo con Haiku: céntimos
+make llm-dev                                   # todo desarrollo con Haiku (≈ 0,36 $)
+make llm-dev MODEL=sonnet                      # todo desarrollo con Sonnet (≈ 7 $)
+make llm-dev EFFORT=low                        # y otro nivel de esfuerzo
+make llm-test MODEL=<el elegido> EFFORT=<el elegido>   # una sola vez, al final
+```
+
+Cada ejecución deja `out/<dev|test>/llm-<modelo>-<esfuerzo>/report.md`, con la precisión de las fusiones del LLM, lo que pasa a personas, F1 del sistema completo, coste por cada mil registros y latencia.
+
+**Para dar la fase por buena:**
+- Que el LLM no meta más fusiones erróneas que las reglas solas, porque una fusión errónea es peor que un duplicado perdido.
+- Que el F1 de «reglas + LLM + personas» se acerque al techo (99,4 % en test).
+- Que lo que pasa a personas sea una fracción pequeña de la zona gris.
 
 ## Fase 4: registro maestro y pantalla de revisión (1 fin de semana)
 

@@ -1,7 +1,11 @@
 [project]
 name = "say-my-name"
-version = "0.2.0"
+version = "0.3.0.dev0"
 description = "Business partner deduplication for SAP S/4HANA migrations: rules first, an LLM only for the grey zone."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
+
+[project.optional-dependencies]
+# Phase 3 only (the LLM step). Everything else uses the standard library.
+llm = ["anthropic==1.17.0"]

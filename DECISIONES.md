@@ -74,3 +74,31 @@ La zona gris ya no es homogénea. Cada motivo pide algo distinto al LLM:
 
 - **«name + address, grey zone»** y **«same tax ID, different name»**: el LLM puede razonar con los datos de la ficha. Por ejemplo, «Norte» frente a «Sur» indica otra empresa, y el mismo CIF con la misma dirección indica un cambio de nombre.
 - **«same tax ID, different province»** y **«same name, another province»**: los datos no bastan. La respuesta correcta suele ser «no lo sé: comprobar en el Registro Mercantil». El LLM tiene que saber decir eso en lugar de adivinar.
+
+## Fase 3 · Diseño (1-nov-2026, antes de gastar nada)
+
+- **D5 · Solo la zona gris va al LLM.** Las reglas deciden gratis casi todos los pares candidatos. El LLM ve 1.077 pares en desarrollo y 162 en test.
+- **D6 · Tres respuestas, no dos:** `same_company`, `different_companies` y `needs_external_check`.
+  - La fase 2 demostró que hay pares que los datos no deciden, como el mismo CIF o el mismo nombre en otra provincia.
+  - Lo que el LLM no decide va a una persona y nunca se fusiona por defecto. Lo mismo pasa con cualquier respuesta inservible: un rechazo, una respuesta cortada, un JSON roto o un error de la API.
+- **D7 · Salida forzada con esquema JSON** (`output_config.format`), con campos para auditar la decisión: confianza, patrón, pruebas citando los campos y una explicación de una frase. Así una persona puede revisar la decisión sin repetir el análisis.
+- **D8 · Qué ve el modelo:**
+  - los campos SAP de las dos fichas;
+  - el motivo que dan las reglas;
+  - si cada CIF pasa el dígito de control. Es un cálculo determinista, así que no se le pide al modelo.
+  - No ve los identificadores de registro ni las puntuaciones de similitud.
+- **D9 · Modelos:** Claude Haiku 5.5 frente a Claude Sonnet 5.5, con el esfuerzo configurable (low, medium o high).
+  - Sonnet lleva `fallbacks: "default"`: si un clasificador de seguridad rechaza la petición, el servidor la reintenta en otro modelo.
+  - Haiku 5.5 no tiene esa opción, así que un rechazo suyo va a una persona.
+- **D10 · Coste:**
+  - El prompt de sistema (~1.200 tokens) va en caché.
+  - Las respuestas se guardan en disco con un hash del prompt: repetir no cuesta, y cambiar el prompt solo invalida lo afectado.
+  - Estimación sin llamadas reales (`make llm-dry`), suponiendo 600 tokens de salida por par: todo desarrollo con Haiku ≈ 0,36 $ y con Sonnet ≈ 7,23 $.
+  - La Batches API (un 50 % más barata) queda descartada por ahora: a este volumen ahorra céntimos y no admite `fallbacks`.
+- **Sesgo que hay que declarar:** el prompt está escrito sabiendo qué ruido mete el generador (Norte/Sur, CIF copiados…). Es conocimiento de dominio real, pero las cifras saldrán optimistas frente a datos reales. Por eso el prompt se itera solo en desarrollo y test se mide una vez.
+
+**Método de la fase 3:**
+1. `make llm-sample` con 50 pares, que cuesta céntimos, para comprobar que todo funciona.
+2. `make llm-dev` con Haiku y con Sonnet, a dos niveles de esfuerzo.
+3. Iterar el prompt mirando solo desarrollo y apuntar aquí cada cambio.
+4. Congelar el prompt y el modelo, y ejecutar `make llm-test` una sola vez.
