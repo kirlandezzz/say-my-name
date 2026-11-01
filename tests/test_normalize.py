@@ -22,6 +22,14 @@ class NormalizeTest(unittest.TestCase):
         tokens, legal = nz.parse_name("Dist. Talvora del Norte", "S.L.U.")
         self.assertEqual((tokens, legal), (["DISTRIBUCIONES", "TALVORA", "NORTE"], "SLU"))
 
+    def test_rare_abbreviations(self):
+        cases = {"CIAL": "COMERCIAL", "DTBCIONES": "DISTRIBUCIONES", "MAQRIA": "MAQUINARIA",
+                 "HRMNOS": "HERMANOS", "TLLS": "TALLERES", "INGA": "INGENIERIA",
+                 "CNES": "CNES",  # fits CONSTRUCCIONES and COMPONENTES: left alone
+                 "TALVORA": "TALVORA", "COMERCIAL": "COMERCIAL"}
+        for token, expected in cases.items():
+            self.assertEqual(nz.expand_abbreviation(token), expected, token)
+
     def test_street_variants_agree(self):
         expected = (["MAYOR"], "12")
         for raw in ("Calle Mayor, 12", "C/ Mayor 12", "C/. Mayor, nº 12", "CL. MAYOR Nº 012"):

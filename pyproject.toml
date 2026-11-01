@@ -1,6 +1,6 @@
 [project]
 name = "say-my-name"
-version = "0.1.0"
+version = "0.2.0"
 description = "Business partner deduplication for SAP S/4HANA migrations: rules first, an LLM only for the grey zone."
 readme = "README.md"
 requires-python = ">=3.11"

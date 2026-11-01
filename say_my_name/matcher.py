@@ -16,11 +16,12 @@ from pathlib import Path
 
 from . import normalize as nz
 from . import taxid
-from .similarity import jaro_winkler, token_similarity
+from .similarity import edit_distance, jaro_winkler, token_similarity
 
 AUTO_THRESHOLD = 0.92
 REVIEW_THRESHOLD = 0.75
 TAX_NAME_THRESHOLD = 0.75  # same tax ID but names this different -> REVIEW
+SAME_NAME_THRESHOLD = 0.95  # same name in another province -> REVIEW (moved, or a namesake)
 MAX_BLOCK = 300
 WEIGHTS = {"name": 0.6, "address": 0.25, "location": 0.15}
 COMPATIBLE_LEGAL = {frozenset({"SL", "SLU"}), frozenset({"SL", "SLL"})}
@@ -32,6 +33,7 @@ class Prepared:
     tokens: list[str]
     legal: str
     cif: str  # valid, normalised tax ID or ""
+    bad_cif: str  # tax ID that fails the check digit (only when there is no valid one)
     street: list[str]
     number: str
     postcode: str
@@ -53,18 +55,19 @@ class PairResult:
 
 def prepare(row: dict) -> Prepared:
     tokens, legal = nz.parse_name(row["NAME1"], row["NAME2"])
-    cif = ""
+    cif = bad_cif = ""
     for raw in (row.get("STCD1"), row.get("STCEG")):
         candidate = taxid.normalize(raw)
         if taxid.is_valid(candidate):
-            cif = candidate
+            cif, bad_cif = candidate, ""
             break
+        bad_cif = bad_cif or candidate
     street, number = nz.parse_street(row["STRAS"])
     postcode = nz.normalize_postcode(row["PSTLZ"])
     city = nz.canonical_city(row["ORT01"])
     regio = (row.get("REGIO") or "").strip()
     province = regio.zfill(2) if regio else (postcode[:2] or nz.CITY_PROVINCE.get(city, ""))
-    return Prepared(row["RECORD_ID"], tokens, legal, cif, street, number, postcode, city, province)
+    return Prepared(row["RECORD_ID"], tokens, legal, cif, bad_cif, street, number, postcode, city, province)
 
 
 def block_keys(p: Prepared) -> set[str]:
@@ -76,6 +79,7 @@ def block_keys(p: Prepared) -> set[str]:
         if len(tok) >= 4 and tok not in nz.GENERIC_WORDS:
             keys.add(f"P:{tok[:4]}:{province}")
             keys.add(f"S:{tok[-3:]}:{province}")
+            keys.add(f"N:{tok}")  # whole brand, any province: finds companies that moved
     if p.postcode and p.number:
         keys.add(f"A:{p.postcode}:{p.number}")
     return keys
@@ -116,6 +120,14 @@ def address_similarity(a: Prepared, b: Prepared) -> float:
     return 0.8 * street + 0.2 * number
 
 
+def tax_typo_apart(a: Prepared, b: Prepared) -> bool:
+    """One valid tax ID and one invalid one, a single typo apart (B12345674 / B12845674)."""
+    for good, bad in ((a.cif, b.bad_cif), (b.cif, a.bad_cif)):
+        if good and len(bad) == len(good) and bad[0] == good[0] and edit_distance(good, bad) == 1:
+            return True
+    return False
+
+
 def score_pair(a: Prepared, b: Prepared) -> PairResult:
     name = token_similarity(a.tokens, b.tokens)
     address = address_similarity(a, b)
@@ -128,16 +140,23 @@ def score_pair(a: Prepared, b: Prepared) -> PairResult:
         return PairResult(a.rid, b.rid, band, round(value, 4), reason,
                           round(name, 4), round(address, 4), round(location, 4))
 
-    if a.cif and b.cif:
-        if a.cif != b.cif:
-            return result("NO", "different valid tax IDs")
-        if name >= TAX_NAME_THRESHOLD:
-            return result("AUTO", "same valid tax ID", 1.0)
-        return result("REVIEW", "same tax ID, different name")
+    if a.cif and b.cif and a.cif != b.cif:
+        return result("NO", "different valid tax IDs")
+    same_tax = bool(a.cif) and a.cif == b.cif
+    if same_tax or tax_typo_apart(a, b):
+        label = "same tax ID" if same_tax else "tax ID one typo apart"
+        if name < TAX_NAME_THRESHOLD:
+            return result("REVIEW", f"{label}, different name")
+        if a.province and b.province and a.province != b.province:
+            # A move or a tax ID copied onto a namesake: the data cannot tell them apart.
+            return result("REVIEW", f"{label}, different province")
+        return result("AUTO", label, 1.0)
     if score >= AUTO_THRESHOLD:
         return result("AUTO", "name + address")
     if score >= REVIEW_THRESHOLD:
         return result("REVIEW", "name + address, grey zone")
+    if name >= SAME_NAME_THRESHOLD and a.province and b.province and a.province != b.province:
+        return result("REVIEW", "same name, another province")
     return result("NO", "low similarity")
 
 

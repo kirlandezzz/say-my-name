@@ -37,12 +37,16 @@ ABBREVIATIONS = {
     "GRAL": "GENERAL",
 }
 
-# Words too common to identify a company; excluded from blocking keys.
-GENERIC_WORDS = {
+# Activity words: the targets for abbreviations the table above does not know.
+SECTOR_WORDS = {
     "CONSTRUCCIONES", "DISTRIBUCIONES", "TRANSPORTES", "SUMINISTROS",
     "INSTALACIONES", "INGENIERIA", "LOGISTICA", "ALIMENTACION", "MAQUINARIA",
     "SERVICIOS", "TALLERES", "COMERCIAL", "INDUSTRIAS", "ENVASES",
     "CLIMATIZACION", "RECAMBIOS", "COMPONENTES", "ELECTRICIDAD", "HERMANOS",
+}
+
+# Words too common to identify a company; excluded from blocking keys.
+GENERIC_WORDS = SECTOR_WORDS | {
     "GRUPO", "NORTE", "SUR", "LEVANTE", "CANARIAS", "ATLANTICO", "IBERICA",
     "CENTRO", "MEDITERRANEO", "COMPANIA", "GENERAL",
 }
@@ -96,8 +100,29 @@ def split_legal_form(name: str) -> tuple[str, str]:
     return name, ""
 
 
+def _is_subsequence(short: str, long: str) -> bool:
+    letters = iter(long)
+    return all(ch in letters for ch in short)
+
+
+def expand_abbreviation(token: str) -> str:
+    """Known abbreviation, or the only activity word that ``token`` abbreviates.
+
+    An unknown abbreviation keeps the first letter and drops letters, so it is a
+    subsequence of the full word: CIAL -> COMERCIAL, DTBCIONES -> DISTRIBUCIONES.
+    Ambiguous ones (CNES fits CONSTRUCCIONES and COMPONENTES) stay as they are.
+    """
+    if token in ABBREVIATIONS:
+        return ABBREVIATIONS[token]
+    if len(token) < 3 or token in GENERIC_WORDS or not token.isalpha():
+        return token
+    fits = [w for w in SECTOR_WORDS
+            if w[0] == token[0] and len(w) >= len(token) + 2 and _is_subsequence(token, w)]
+    return fits[0] if len(fits) == 1 else token
+
+
 def name_tokens(core: str) -> list[str]:
-    tokens = [ABBREVIATIONS.get(t, t) for t in core.split()]
+    tokens = [expand_abbreviation(t) for t in core.split()]
     return [t for t in tokens if t not in STOPWORDS]
 
 

@@ -15,16 +15,15 @@ Proyecto de portfolio: detectar duplicados de interlocutores comerciales (client
 
 **Antes de seguir, léete todo el código.** En una entrevista te van a preguntar por cualquier línea. Cambia lo que no te convenza; es tu proyecto.
 
-## Fase 2: mejores reglas (1 fin de semana, en tu mano)
+## Fase 2: mejores reglas (hecha el 1-nov-2026)
 
-Método: ajustas con `make dev` (semilla 7) y solo apuntas cifras de `make eval` (semilla 2026). Cada cambio, con su hipótesis y su resultado, va en un `DECISIONES.md`.
+Todo está en `DECISIONES.md`. En test, las fusiones erróneas bajan de 16 a 1, la cobertura sube de 90,0 % a 92,0 % y el techo con revisión perfecta sube a 99,4 %.
 
-Ideas que salen del informe actual, ordenadas por impacto:
+**Decidido el 1-nov:** se mantienen D1 y D4. D4 se revisa en la fase 3 según si el LLM sabe separar mudanzas de homónimas.
 
-1. **Mismo CIF pero en otra provincia → REVIEW en vez de AUTO.** Hoy las 17 fusiones erróneas por CIF copiado entran como AUTO. Ojo: las empresas que se mudaron también caerán en REVIEW. Mide si compensa.
-2. **CIF con un dígito de diferencia** (uno válido y el otro no) como prueba a favor. Hoy el CIF inválido se ignora sin más.
-3. **Abreviaturas raras**: una palabra que es subsecuencia de una palabra del sector y empieza por la misma letra («CIAL» → COMERCIAL, «DTBCIONES» → DISTRIBUCIONES). Hoy fallan la mitad de los pares con abreviaturas raras.
-4. **Bloqueo**: 25 pares nunca llegan a compararse. Mira cuáles son y añade una clave que los recoja sin disparar el número de comparaciones.
+**Pendiente, opcional:**
+- que «CORCA» no se convierta en COMERCIAL (expandir solo si la palabra va seguida de punto);
+- una métrica que pese más una fusión errónea que un duplicado perdido.
 
 ## Fase 3: LLM en la zona gris (1-2 fines de semana, en tu ordenador personal)
 

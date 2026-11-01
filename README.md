@@ -6,23 +6,25 @@ When two legacy ERP systems are merged into S/4HANA, every customer (`KNA1`) and
 
 This project finds those duplicates and measures how well it does it.
 
-## Status: v0.1, rule-based baseline
+## Status: v0.2, rule-based matcher
 
 | | |
 |---|---|
-| Synthetic dataset | ~2,000 `KNA1`/`LFA1` records from two systems, with ground truth |
+| Synthetic dataset | `KNA1`/`LFA1` records from two systems with ground truth (dev: 5,000 companies, test: 1,000) |
 | Matcher | normalise → block → score pairs → cluster, in plain Python (no dependencies) |
 | Evaluation | pairwise and B³ precision/recall/F1, miss rate per noise type, wrong merges per cause |
 
-Results on the held-out seed (2026). Thresholds were tuned on seed 7 only.
+Results on the held-out seed (2026). Rules and thresholds were tuned on seed 7 only, and every change is logged with its hypothesis and cost in [`DECISIONES.md`](DECISIONES.md).
 
 | Scenario | Pair precision | Pair recall | Pair F1 |
 |---|---:|---:|---:|
-| Baseline (AUTO merges only) | 98.4 % | 87.0 % | 92.3 % |
-| Accept every grey-zone pair blindly | 94.8 % | 96.1 % | 95.4 % |
-| Perfect grey-zone decisions (ceiling for the LLM step) | 98.5 % | 96.1 % | 97.2 % |
+| Rules only (AUTO merges) | 99.9 % | 92.0 % | 95.8 % |
+| Accept every grey-zone pair blindly | | | 97.4 % |
+| Perfect grey-zone decisions (ceiling for the LLM step) | | | 99.4 % |
 
-The grey zone (REVIEW band) holds 195 of 8,899 candidate pairs. 123 of them are the same company. The rest are sibling companies, namesakes and tax IDs copied from a related company. Deciding these well is the job of the LLM step (phase 3).
+Phase 2 cut wrong merges on the test seed from 16 to 1 and raised recall from 90.0 % to 92.0 %.
+
+The grey zone (REVIEW band) holds 162 of 8,343 candidate pairs, of which 90 are the same company. Each pair carries a reason, and the reasons need different handling. Some can be argued from the record ("Norte" vs "Sur" means another company). Others cannot be settled from the data at all, such as the same tax ID in another province (a move, or an ID copied onto a namesake). For those, the right answer is "check the company register". Teaching the LLM step to say that instead of guessing is the core of phase 3.
 
 ## Quick start
 
@@ -55,19 +57,27 @@ All data is synthetic: invented brand names, generic street names, and tax IDs w
 
 ## How the matcher works
 
-1. **Normalise**: accents, punctuation, legal form, common abbreviations, street type, house number, city aliases, postcode, and tax ID (validated with the CIF check digit).
-2. **Block**: compare only records that share a valid tax ID, a distinctive name prefix or suffix within the province, or postcode plus house number.
-3. **Score**: name similarity (Jaro-Winkler on sorted tokens plus a typo-tolerant token Dice), address and location. Two different valid tax IDs never match. The same tax ID with very different names goes to REVIEW.
+1. **Normalise**:
+   - accents, punctuation and legal form;
+   - abbreviations, from a table of common ones plus any token that is an unambiguous subsequence of one activity word (`CIAL` → `COMERCIAL`);
+   - street type, house number, city aliases and postcode;
+   - tax ID, validated with the CIF check digit.
+2. **Block**: compare only records that share a valid tax ID, a distinctive name prefix or suffix within the province, a whole brand token anywhere, or postcode plus house number.
+3. **Score**: name similarity (Jaro-Winkler on sorted tokens plus a typo-tolerant token Dice), address and location. Then these rules apply:
+   - Two different valid tax IDs never match.
+   - The same tax ID counts only with a similar name in the same province; otherwise the pair goes to REVIEW.
+   - A valid and an invalid tax ID one typo apart count as the same tax ID.
+   - The same name in another province with no tax ID to confirm it goes to REVIEW.
 4. **Cluster**: union-find over AUTO pairs, refusing any merge that would put two different valid tax IDs in one Business Partner.
 
 ## Honest caveats
 
-- The common-abbreviation table and the city aliases are reference data shared with the generator. That is realistic, since real projects keep such tables, but it flatters those noise types. The rare abbreviations are deliberately missing from the table.
+- The common-abbreviation table and the city aliases are reference data shared with the generator. That is realistic, since real projects keep such tables, but it flatters those noise types. Rare abbreviations are not in the table and are caught by the subsequence rule instead. That rule wrongly expanded one invented brand in the dev data (logged in `DECISIONES.md`).
 - The miss-rate table in the report is correlational: a pair usually carries several noise operations.
 - Synthetic data is cleaner than real data in some ways and harsher in others. The point is a controlled, repeatable benchmark.
 
 ## Roadmap
 
-- **Phase 2**: better rules. The report already names the targets.
+- **Phase 2** (done): rules that cut wrong merges and route undecidable cases to review. See `DECISIONES.md`.
 - **Phase 3**: an LLM decides the REVIEW pairs, with structured output and cited evidence. The evaluation compares models on accuracy, cost per 1,000 records and latency against the ceiling above.
 - **Phase 4**: golden record proposal (survivorship rules, customer and vendor roles on one BP), a review screen for people, and a legacy-key → BP mapping file for the migration.

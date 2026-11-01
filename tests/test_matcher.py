@@ -25,6 +25,26 @@ class MatcherTest(unittest.TestCase):
         a = prepare(row("a", "Distribuciones Talvora, S.L.", stcd1="B12345675"))
         self.assertEqual(a.cif, "")
 
+    def test_tax_id_one_typo_apart_merges(self):
+        a = prepare(row("a", "Distribuciones Talvora, S.L.", stcd1="B12345674"))
+        b = prepare(row("b", "DIST. TALVORA SL", stcd1="B12845674"))  # invalid: one digit changed
+        self.assertEqual(b.bad_cif, "B12845674")
+        result = score_pair(a, b)
+        self.assertEqual((result.band, result.reason), ("AUTO", "tax ID one typo apart"))
+
+    def test_same_tax_id_in_another_province_goes_to_review(self):
+        a = prepare(row("a", "Distribuciones Talvora, S.L.", stcd1="B12345674"))
+        b = prepare(row("b", "Distribuciones Talvora, S.L.", stcd1="B12345674", stras="Calle Real, 3",
+                        pstlz="41001", ort01="Sevilla", regio="41"))
+        self.assertEqual(score_pair(a, b).band, "REVIEW")
+
+    def test_same_name_in_another_province_without_tax_id_goes_to_review(self):
+        a = prepare(row("a", "Distribuciones Talvora, S.L.", stcd1="B12345674"))
+        b = prepare(row("b", "DISTRIBUCIONES TALVORA SL", stras="Calle Real, 3",
+                        pstlz="41001", ort01="Sevilla", regio="41"))
+        result = score_pair(a, b)
+        self.assertEqual((result.band, result.reason), ("REVIEW", "same name, another province"))
+
     def test_sibling_without_tax_id_goes_to_review(self):
         a = prepare(row("a", "Distribuciones Talvora del Norte, S.L."))
         b = prepare(row("b", "Distribuciones Talvora del Sur, S.L."))
