@@ -150,12 +150,14 @@ def _strip_accents(s: str) -> str:
 
 
 def _new_brand(rng: random.Random, used: set[str]) -> str:
-    while True:
-        mid = rng.choice(SYL_MID) if rng.random() < 0.6 else ""
-        brand = (rng.choice(SYL_START) + mid + rng.choice(SYL_END)).capitalize()
+    """Invented brand: start + 0-2 middle syllables + end (~37,000 combinations)."""
+    for _ in range(1000):
+        mids = "".join(rng.choice(SYL_MID) for _ in range(_weighted(rng, ((0, 35), (1, 45), (2, 20)))))
+        brand = (rng.choice(SYL_START) + mids + rng.choice(SYL_END)).capitalize()
         if brand not in used:
             used.add(brand)
             return brand
+    raise RuntimeError("ran out of brand names: add syllables or generate fewer companies")
 
 
 def _postcode(city: City, rng: random.Random) -> str:

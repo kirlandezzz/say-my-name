@@ -1,16 +1,24 @@
+import random
 import tempfile
 import unittest
 from pathlib import Path
 
 from say_my_name import taxid
 from say_my_name.evaluate import bcubed, evaluate, pairwise
-from say_my_name.generator import generate, write_dataset
+from say_my_name.generator import _new_brand, generate, write_dataset
 from say_my_name.matcher import match
 
 
 class GeneratorTest(unittest.TestCase):
     def test_deterministic(self):
         self.assertEqual(generate(3, 50), generate(3, 50))
+
+    def test_enough_brand_names_for_large_runs(self):
+        # v0.1 had ~3,100 combinations and hung forever above ~3,000 companies.
+        rng, used = random.Random(1), set()
+        for _ in range(15000):
+            _new_brand(rng, used)
+        self.assertEqual(len(used), 15000)
 
     def test_fields_and_truth(self):
         records, truth = generate(3, 200)
